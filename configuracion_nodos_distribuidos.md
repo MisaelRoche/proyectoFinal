@@ -141,21 +141,63 @@ brew services restart mysql
 
 ### 3b. Crear usuario con acceso remoto
 
-Conectarse a MySQL como root y ejecutar:
+Cada nodo tiene su **propio usuario MySQL**. Conectarse como root y ejecutar el script
+correspondiente a tu nodo (solo el tuyo):
 
+| Nodo | Sucursal | Usuario MySQL | Contraseña |
+|------|----------|---------------|------------|
+| 1 | Mexicali Centro | `biblioteca` | `Biblioteca123!` |
+| 2 | Tijuana | `bibliotecaNodo2` | `nodo2.` |
+| 3 | Ensenada | `bibliotecaNodo3` | `nodo3.` |
+| 4 | Mexicali Universidad | `biblioteca_nodo4` | `Biblioteca123!` |
+| 5 | Rosarito | `bibliotecaNodo5` | `nodo5.` |
+| 6 | Tecate | `bibliotecaNodo6` | `nodo6.` |
+
+**Nodo 1:**
 ```sql
--- Crear usuario 'biblioteca' accesible desde cualquier IP de la VPN
-CREATE USER 'biblioteca'@'%' IDENTIFIED BY 'password123';
-
--- Dar permisos sobre la base de datos del proyecto
+CREATE USER IF NOT EXISTS 'biblioteca'@'%' IDENTIFIED BY 'Biblioteca123!';
 GRANT ALL PRIVILEGES ON biblioteca.* TO 'biblioteca'@'%';
 FLUSH PRIVILEGES;
-
--- Verificar que el usuario fue creado
 SELECT user, host FROM mysql.user WHERE user = 'biblioteca';
 ```
 
-> Reemplaza `password123` por una contraseña segura. **Todos los nodos deben usar la misma contraseña** para facilitar las conexiones cruzadas.
+**Nodo 2:**
+```sql
+CREATE USER IF NOT EXISTS 'bibliotecaNodo2'@'%' IDENTIFIED BY 'nodo2.';
+GRANT ALL PRIVILEGES ON biblioteca.* TO 'bibliotecaNodo2'@'%';
+FLUSH PRIVILEGES;
+```
+
+**Nodo 3:**
+```sql
+CREATE USER IF NOT EXISTS 'bibliotecaNodo3'@'%' IDENTIFIED BY 'nodo3.';
+GRANT ALL PRIVILEGES ON biblioteca.* TO 'bibliotecaNodo3'@'%';
+FLUSH PRIVILEGES;
+```
+
+**Nodo 4:**
+```sql
+CREATE USER IF NOT EXISTS 'biblioteca_nodo4'@'%' IDENTIFIED BY 'Biblioteca123!';
+GRANT ALL PRIVILEGES ON biblioteca.* TO 'biblioteca_nodo4'@'%';
+FLUSH PRIVILEGES;
+```
+
+**Nodo 5:**
+```sql
+CREATE USER IF NOT EXISTS 'bibliotecaNodo5'@'%' IDENTIFIED BY 'nodo5.';
+GRANT ALL PRIVILEGES ON biblioteca.* TO 'bibliotecaNodo5'@'%';
+FLUSH PRIVILEGES;
+```
+
+**Nodo 6:**
+```sql
+CREATE USER IF NOT EXISTS 'bibliotecaNodo6'@'%' IDENTIFIED BY 'nodo6.';
+GRANT ALL PRIVILEGES ON biblioteca.* TO 'bibliotecaNodo6'@'%';
+FLUSH PRIVILEGES;
+```
+
+> Los demás backends necesitan conectarse con el usuario **de tu nodo**, no con root.
+> Las credenciales de todos los nodos están centralizadas en `backend/config/nodos.js`.
 
 ### 3c. Abrir el puerto 3306 en el firewall
 
@@ -366,16 +408,20 @@ SELECT COUNT(*) AS prestamos_locales FROM Prestamo;
 
 ## 6. Tabla resumen de nodos
 
-| Nodo | Integrante | IP Tailscale | Sucursal | Fragmento Horizontal | Fragmento Vertical |
-|------|-----------|-------------|----------|---------------------|--------------------|
-| 1 | — | `tailscale ip` | Mexicali Centro | `Prestamo` donde `id_sucursal = 1` | Catálogo público |
-| 2 | — | `tailscale ip` | Tijuana | `Prestamo` donde `id_sucursal = 2` | Catálogo público |
-| 3 | — | `tailscale ip` | Ensenada | `Prestamo` donde `id_sucursal = 3` | Catálogo público |
-| 4 | — | `tailscale ip` | Mexicali Universidad | `Prestamo` donde `id_sucursal = 4` | Catálogo **+ campos admin** (costo, proveedor) |
-| 5 | — | `tailscale ip` | Rosarito | `Prestamo` donde `id_sucursal = 5` | Catálogo público |
-| 6 | — | `tailscale ip` | Tecate | `Prestamo` donde `id_sucursal = 6` | Catálogo público |
+| Nodo | IP Tailscale | Sucursal | Frag. Horizontal (Usuario / Inventario / Préstamo) | Frag. Vertical |
+|------|-------------|----------|----------------------------------------------------|----------------|
+| 1 | `100.127.191.53`  | Mexicali Centro     | `id_sucursal = 1` en las 3 tablas | `Libro` catálogo público (replicado) |
+| 2 | `100.88.250.105`  | Tijuana             | `id_sucursal = 2` en las 3 tablas | `Libro` catálogo público (replicado) |
+| 3 | `100.121.240.118` | Ensenada            | `id_sucursal = 3` en las 3 tablas | `Libro` catálogo público (replicado) |
+| 4 | `100.67.56.91`    | Mexicali Universidad| `id_sucursal = 4` en las 3 tablas | `Libro` público + **`LibroAdmin`** (costo, proveedor, fecha_adquisicion) |
+| 5 | `100.95.94.48`    | Rosarito            | `id_sucursal = 5` en las 3 tablas | `Libro` catálogo público (replicado) |
+| 6 | `100.114.254.124` | Tecate              | `id_sucursal = 6` en las 3 tablas | `Libro` catálogo público (replicado) |
 
-> Llenar la columna "IP Tailscale" una vez que todos instalen Tailscale y compartan su IP.
+**Tablas replicadas en los 6 nodos:** `Categoria`, `Sucursal`, `Libro` (catálogo público).
+
+**Nota sobre integridad distribuida:** `Prestamo` NO lleva FK a `Usuario` porque el
+prestatario puede estar registrado en otro nodo (préstamo inter-sucursal). La validación
+de existencia del usuario se hace a nivel de aplicación consultando el nodo dueño.
 
 ---
 
@@ -395,22 +441,25 @@ npm install mysql2
 Crear el archivo `backend/config/nodos.js` con las IPs reales de Tailscale:
 
 ```js
-// backend/config/nodos.js
+// backend/config/nodos.js  (IPs reales de Tailscale)
 export const nodos = {
-  1: { host: '100.64.0.1', nombre: 'Mexicali Centro' },
-  2: { host: '100.64.0.2', nombre: 'Tijuana' },
-  3: { host: '100.64.0.3', nombre: 'Ensenada' },
-  4: { host: '100.64.0.4', nombre: 'Mexicali Universidad' },
-  5: { host: '100.64.0.5', nombre: 'Rosarito' },
-  6: { host: '100.64.0.6', nombre: 'Tecate' },
+  1: { host: '100.127.191.53',  nombre: 'Mexicali Centro' },
+  2: { host: '100.88.250.105',  nombre: 'Tijuana' },
+  3: { host: '100.121.240.118', nombre: 'Ensenada' },
+  4: { host: '100.67.56.91',    nombre: 'Mexicali Universidad' },
+  5: { host: '100.95.94.48',    nombre: 'Rosarito' },
+  6: { host: '100.114.254.124', nombre: 'Tecate' },
 }
 
-// Credenciales comunes para todos los nodos
+// Credenciales comunes (ajustar en backend/.env)
 export const credenciales = {
-  user:     'biblioteca',
-  password: 'password123',
+  user:     process.env.DB_USER || 'biblioteca',
+  password: process.env.DB_PASS || 'password123',
   database: 'biblioteca',
 }
+
+// Número de nodo de esta máquina (configurar en .env)
+export const MI_NODO = Number(process.env.MI_NODO || 1)
 ```
 
 ### Ejemplo de conexión a un nodo específico
