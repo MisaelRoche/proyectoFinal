@@ -4,7 +4,7 @@ import { queryLocal, queryTodos, queryNodo, buscarUsuario, nodoDeSucursal, MI_NO
 const router = Router()
 
 function today() {
-  return new Date().toISOString().split('T')[0]
+  return new Date().toISOString().split('T')[0]//hola
 }
 
 function addDays(dateStr, days) {
