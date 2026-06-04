@@ -41,6 +41,7 @@ async function enrich(p) {
 
   return {
     ...p,
+    multa:          Number(p.multa) || 0,
     usuario_nombre,
     libro_titulo:   libro[0]?.titulo  || '',
     sucursal_nombre: sucursal[0]?.nombre || '',

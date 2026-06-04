@@ -4,7 +4,11 @@ import { queryLocal, queryTodos, queryNodo, nodoDeSucursal, MI_NODO } from '../d
 const router = Router()
 
 function enrich(u) {
-  return { ...u, sucursal_nombre: u.sucursal_nombre || '' }
+  return {
+    ...u,
+    sucursal_nombre:    u.sucursal_nombre || '',
+    multas_acumuladas:  Number(u.multas_acumuladas) || 0,
+  }
 }
 
 // GET /api/usuarios?distribuido=1
