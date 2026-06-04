@@ -18,6 +18,10 @@ export const DB = { port: 3306 }
 // El número de nodo de esta máquina — se configura en backend/.env
 export const MI_NODO = Number(process.env.MI_NODO || 1)
 
+// Nodos que almacenan los fragmentos verticales distribuidos de Usuario
+export const NODO_PERFIL = 1   // UsuarioPerfil — identidad + ubicación
+export const NODO_ACCESO = 4   // UsuarioAcceso — email + multas
+
 // Dado un id_sucursal, devuelve el número de nodo que lo aloja.
 // En este diseño: id_sucursal === id_nodo (relación 1:1).
 export function nodoDeSucursal(idSucursal) {

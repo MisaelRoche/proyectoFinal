@@ -184,7 +184,7 @@ router.put('/:id/devolver', async (req, res) => {
           // Q4: solo actualiza UsuarioAcceso (fragmento vertical de alto acceso)
           // UsuarioPerfil (datos de identidad) no se toca en devoluciones
           await queryNodo(
-            resultadoUsuario.idNodo,
+            resultadoUsuario.idNodoAcceso,   // siempre será Nodo 4 (NODO_ACCESO)
             'UPDATE UsuarioAcceso SET multas_acumuladas = multas_acumuladas + ? WHERE id_usuario = ?',
             [multa, p.id_usuario]
           )

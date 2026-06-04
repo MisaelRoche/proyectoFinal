@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { queryLocal, queryTodos, queryNodo, nodoDeSucursal, MI_NODO } from '../db/pool.js'
+import { queryTodos, queryPerfil, queryAcceso, buscarPerfil } from '../db/pool.js'
 
 const router = Router()
 
@@ -11,87 +11,86 @@ function enrich(u) {
   }
 }
 
-// GET /api/usuarios?distribuido=1
-// Sin distribuido → solo usuarios de este nodo (fragmento local)
-// Con distribuido=1 → fan-out a todos los nodos
-// Reconstruye desde los 2 fragmentos verticales (UsuarioPerfil + UsuarioAcceso)
+/**
+ * Reconstruye usuarios desde los 2 fragmentos verticales:
+ *  - Nodo 1 (UsuarioPerfil + Sucursal, JOIN local en Nodo 1)
+ *  - Nodo 4 (UsuarioAcceso)
+ * Las queries van en paralelo y el merge se hace en JS por id_usuario.
+ */
+async function reconstruirUsuario(idUsuario = null) {
+  const whereClause = idUsuario ? 'WHERE up.id_usuario = ?' : ''
+  const params      = idUsuario ? [idUsuario] : []
+
+  const [perfilRes, accesoRes] = await Promise.allSettled([
+    queryPerfil(
+      `SELECT up.id_usuario, up.nombre, up.apellidos, up.telefono, up.direccion,
+              up.id_sucursal_registro, up.fecha_registro,
+              s.nombre AS sucursal_nombre
+       FROM UsuarioPerfil up
+       JOIN Sucursal s ON up.id_sucursal_registro = s.id_sucursal
+       ${whereClause}
+       ORDER BY up.id_usuario`,
+      params
+    ),
+    queryAcceso(
+      `SELECT id_usuario, email, multas_acumuladas
+       FROM UsuarioAcceso
+       ${idUsuario ? 'WHERE id_usuario = ?' : ''}`,
+      params
+    ),
+  ])
+
+  const perfiles = perfilRes.status === 'fulfilled' ? perfilRes.value : []
+  const accesos  = accesoRes.status === 'fulfilled' ? accesoRes.value : []
+
+  const accesoMap = new Map(accesos.map(a => [a.id_usuario, a]))
+  return perfiles.map(p => enrich({
+    ...p,
+    email:             accesoMap.get(p.id_usuario)?.email             ?? '',
+    multas_acumuladas: accesoMap.get(p.id_usuario)?.multas_acumuladas ?? 0,
+  }))
+}
+
+// GET /api/usuarios
+// Consulta Nodo 1 (Perfil + Sucursal) y Nodo 4 (Acceso) en paralelo.
+// El merge se hace en JavaScript por id_usuario.
 router.get('/', async (req, res) => {
   try {
-    const sql = `
-      SELECT up.id_usuario, up.nombre, up.apellidos, up.telefono, up.direccion,
-             up.id_sucursal_registro, up.fecha_registro,
-             ua.email, ua.multas_acumuladas,
-             s.nombre AS sucursal_nombre
-      FROM UsuarioPerfil up
-      JOIN UsuarioAcceso ua ON up.id_usuario = ua.id_usuario
-      JOIN Sucursal s ON up.id_sucursal_registro = s.id_sucursal
-      ORDER BY up.id_usuario
-    `
-
-    const rows = req.query.distribuido === '1'
-      ? await queryTodos(sql)
-      : await queryLocal(sql)
-
-    res.json(rows.map(enrich))
+    const usuarios = await reconstruirUsuario()
+    res.json(usuarios)
   } catch (err) {
     res.status(500).json({ message: 'Error al obtener usuarios', detail: err.message })
   }
 })
 
 // GET /api/usuarios/:id
-// Busca primero en local; si no está, consulta el nodo correcto por sucursal.
-// Reconstruye desde los 2 fragmentos verticales (UsuarioPerfil + UsuarioAcceso)
+// Busca en Nodo 1 (Perfil) y Nodo 4 (Acceso) en paralelo.
 router.get('/:id', async (req, res) => {
   try {
-    const idUsuario = Number(req.params.id)
-    const sql = `
-      SELECT up.id_usuario, up.nombre, up.apellidos, up.telefono, up.direccion,
-             up.id_sucursal_registro, up.fecha_registro,
-             ua.email, ua.multas_acumuladas,
-             s.nombre AS sucursal_nombre
-      FROM UsuarioPerfil up
-      JOIN UsuarioAcceso ua ON up.id_usuario = ua.id_usuario
-      JOIN Sucursal s ON up.id_sucursal_registro = s.id_sucursal
-      WHERE up.id_usuario = ?
-    `
-
-    // Intentar local
-    let [u] = await queryLocal(sql, [idUsuario])
-
-    // Si no está local, hacer fan-out (en otro nodo)
-    if (!u) {
-      const remoto = await queryTodos(sql, [idUsuario])
-      u = remoto[0]
-    }
-
-    if (!u) return res.status(404).json({ message: 'Usuario no encontrado en ningún nodo' })
-    res.json(enrich(u))
+    const [u] = await reconstruirUsuario(Number(req.params.id))
+    if (!u) return res.status(404).json({ message: 'Usuario no encontrado' })
+    res.json(u)
   } catch (err) {
     res.status(500).json({ message: 'Error al obtener usuario', detail: err.message })
   }
 })
 
 // GET /api/usuarios/:id/prestamos
-// Los préstamos del usuario pueden estar distribuidos en varios nodos
-// (si el usuario ha prestado en distintas sucursales).
+// Q5: verifica existencia del usuario SOLO en Nodo 1 (Perfil).
+// Luego fan-out a 6 nodos para los préstamos (Prestamo sigue fragmentado H).
 router.get('/:id/prestamos', async (req, res) => {
   try {
     const idUsuario = Number(req.params.id)
 
-    // Verificar que el usuario existe (Q5: solo escanea UsuarioPerfil, sin email ni multas)
-    const sqlUsuario = 'SELECT id_usuario FROM UsuarioPerfil WHERE id_usuario = ?'
-    let [u] = await queryLocal(sqlUsuario, [idUsuario])
-    if (!u) {
-      const remoto = await queryTodos('SELECT id_usuario FROM UsuarioPerfil WHERE id_usuario = ?', [idUsuario])
-      u = remoto[0]
-    }
-    if (!u) return res.status(404).json({ message: 'Usuario no encontrado' })
+    // Q5: solo consulta UsuarioPerfil en Nodo 1 (no necesita email ni multas)
+    const perfil = await buscarPerfil(idUsuario)
+    if (!perfil) return res.status(404).json({ message: 'Usuario no encontrado' })
 
-    // Fan-out: el usuario puede haber prestado en cualquier sucursal
+    // Fan-out a 6 nodos: el usuario pudo haber prestado en cualquier sucursal
     const prestamos = await queryTodos(
       `SELECT p.*, l.titulo AS libro_titulo, s.nombre AS sucursal_nombre
        FROM Prestamo p
-       JOIN Libro   l ON p.id_libro    = l.id_libro
+       JOIN Libro    l ON p.id_libro    = l.id_libro
        JOIN Sucursal s ON p.id_sucursal = s.id_sucursal
        WHERE p.id_usuario = ?
        ORDER BY p.fecha_prestamo DESC`,

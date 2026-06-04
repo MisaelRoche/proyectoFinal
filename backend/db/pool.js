@@ -3,7 +3,7 @@
 // Cada nodo usa sus propias credenciales MySQL definidas en config/nodos.js.
 
 import mysql from 'mysql2/promise'
-import { nodos, DB, MI_NODO, nodoDeSucursal } from '../config/nodos.js'
+import { nodos, DB, MI_NODO, NODO_PERFIL, NODO_ACCESO, nodoDeSucursal } from '../config/nodos.js'
 
 // Cache de pools: Map<idNodo, Pool>
 const pools = new Map()
@@ -75,41 +75,76 @@ export async function queryTodos(sql, params = []) {
   return resultados.flat()
 }
 
+// ─── Helpers para fragmentos verticales distribuidos ─────────────────────────
+
 /**
- * Busca un usuario por id_usuario en todos los nodos (local primero).
- * Reconstruye el usuario desde los 2 fragmentos verticales (UsuarioPerfil + UsuarioAcceso).
- * Devuelve { usuario, idNodo } o null si no se encuentra.
+ * Consulta el fragmento UsuarioPerfil en el Nodo 1.
  */
-export async function buscarUsuario(idUsuario) {
-  const sqlReconstruir = `
-    SELECT up.id_usuario, up.nombre, up.apellidos, up.telefono, up.direccion,
-           up.id_sucursal_registro, up.fecha_registro,
-           ua.email, ua.multas_acumuladas
-    FROM UsuarioPerfil up
-    JOIN UsuarioAcceso ua ON up.id_usuario = ua.id_usuario
-    WHERE up.id_usuario = ?
-  `
-
-  // Intentar local primero (caso más frecuente)
-  try {
-    const rows = await queryLocal(sqlReconstruir, [idUsuario])
-    if (rows.length > 0) return { usuario: rows[0], idNodo: MI_NODO }
-  } catch (_) { /* nodo local caído — poco probable */ }
-
-  // Si no está local, buscar en los otros nodos
-  const otrosNodos = Object.keys(nodos)
-    .map(Number)
-    .filter(n => n !== MI_NODO)
-
-  for (const idNodo of otrosNodos) {
-    try {
-      const rows = await queryNodo(idNodo, sqlReconstruir, [idUsuario])
-      if (rows.length > 0) return { usuario: rows[0], idNodo }
-    } catch (_) {
-      console.warn(`[pool] No se pudo consultar UsuarioPerfil en Nodo ${idNodo}`)
-    }
-  }
-  return null
+export async function queryPerfil(sql, params = []) {
+  return queryNodo(NODO_PERFIL, sql, params)
 }
 
-export { nodoDeSucursal, MI_NODO, nodos }
+/**
+ * Consulta el fragmento UsuarioAcceso en el Nodo 4.
+ */
+export async function queryAcceso(sql, params = []) {
+  return queryNodo(NODO_ACCESO, sql, params)
+}
+
+/**
+ * Busca solo el perfil de un usuario en Nodo 1.
+ * Útil para Q5 (verificar existencia) sin consultar Nodo 4.
+ */
+export async function buscarPerfil(idUsuario) {
+  try {
+    const rows = await queryPerfil(
+      'SELECT id_usuario, nombre, apellidos, id_sucursal_registro FROM UsuarioPerfil WHERE id_usuario = ?',
+      [idUsuario]
+    )
+    return rows[0] || null
+  } catch (_) {
+    return null
+  }
+}
+
+/**
+ * Busca un usuario completo reconstruyendo desde los 2 fragmentos
+ * en nodos distintos (Perfil en Nodo 1, Acceso en Nodo 4).
+ *
+ * Las 2 queries se ejecutan EN PARALELO.
+ * Si Nodo 4 no responde, el usuario se devuelve sin email/multas
+ *   (degradación elegante — el perfil básico sigue disponible).
+ *
+ * Devuelve { usuario, idNodoAcceso } o null si el perfil no existe.
+ */
+export async function buscarUsuario(idUsuario) {
+  const [perfilRes, accesoRes] = await Promise.allSettled([
+    queryPerfil(
+      `SELECT id_usuario, nombre, apellidos, telefono, direccion,
+              id_sucursal_registro, fecha_registro
+       FROM UsuarioPerfil
+       WHERE id_usuario = ?`,
+      [idUsuario]
+    ),
+    queryAcceso(
+      'SELECT id_usuario, email, multas_acumuladas FROM UsuarioAcceso WHERE id_usuario = ?',
+      [idUsuario]
+    ),
+  ])
+
+  const perfil = perfilRes.status === 'fulfilled' ? perfilRes.value[0] : null
+  const acceso = accesoRes.status === 'fulfilled' ? accesoRes.value[0] : null
+
+  if (!perfil) return null
+
+  return {
+    usuario: {
+      ...perfil,
+      email:             acceso?.email             ?? '',
+      multas_acumuladas: acceso?.multas_acumuladas ?? 0,
+    },
+    idNodoAcceso: NODO_ACCESO,   // para updates de multa
+  }
+}
+
+export { nodoDeSucursal, MI_NODO, nodos, NODO_PERFIL, NODO_ACCESO }

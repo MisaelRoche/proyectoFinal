@@ -75,39 +75,34 @@ INSERT IGNORE INTO Libro (id_libro, isbn, titulo, autor, editorial, anio, id_cat
   (12, '978-607-01-0012-2', 'Arquitectura Prehispánica',          'Paul Gendrop',            'Trillas',             2001, 6, 220);
 
 -- ─────────────────────────────────────────────────────────────
--- FRAGMENTACIÓN VERTICAL de Usuario — 2 fragmentos
--- Basado en convergencia BEA/MAC/MFA/MAA: cluster {id,email,multas}
--- Fragmento H: id_sucursal_registro = 1
+-- FRAGMENTO VERTICAL DISTRIBUIDO: UsuarioPerfil (TODOS los usuarios)
+-- Nodo 1 almacena el fragmento Perfil de los 10 usuarios.
+-- El fragmento Acceso (email + multas) está en Nodo 4.
+-- Reconstrucción: app-side merge {Perfil Nodo1} + {Acceso Nodo4}
 -- ─────────────────────────────────────────────────────────────
 
--- Fragmento Vertical 1: UsuarioPerfil (identidad + ubicación)
 CREATE TABLE IF NOT EXISTS UsuarioPerfil (
   id_usuario           INT          PRIMARY KEY AUTO_INCREMENT,
   nombre               VARCHAR(100) NOT NULL,
   apellidos            VARCHAR(100),
   telefono             VARCHAR(20),
   direccion            VARCHAR(200),
-  id_sucursal_registro INT          NOT NULL DEFAULT 1,
+  id_sucursal_registro INT          NOT NULL,
   fecha_registro       DATE,
-  CONSTRAINT chk_uperfil_sucursal CHECK (id_sucursal_registro = 1),
   FOREIGN KEY (id_sucursal_registro) REFERENCES Sucursal(id_sucursal)
 );
 
--- Fragmento Vertical 2: UsuarioAcceso (email + multas — cluster de alto acceso)
-CREATE TABLE IF NOT EXISTS UsuarioAcceso (
-  id_usuario        INT           PRIMARY KEY,
-  email             VARCHAR(150),
-  multas_acumuladas DECIMAL(10,2) DEFAULT 0.00,
-  FOREIGN KEY (id_usuario) REFERENCES UsuarioPerfil(id_usuario)
-);
-
-INSERT IGNORE INTO UsuarioPerfil (id_usuario, nombre, apellidos, telefono, id_sucursal_registro, fecha_registro) VALUES
-  (1, 'María', 'González Herrera', '686-111-0001', 1, '2023-01-15'),
-  (7, 'Laura', 'Díaz Contreras',   '686-111-0007', 1, '2023-09-05');
-
-INSERT IGNORE INTO UsuarioAcceso (id_usuario, email, multas_acumuladas) VALUES
-  (1, 'mgonzalez@email.com',  0.00),
-  (7, 'ldiaz@email.com',     75.00);
+INSERT IGNORE INTO UsuarioPerfil (id_usuario, nombre, apellidos, telefono, direccion, id_sucursal_registro, fecha_registro) VALUES
+  ( 1, 'María',    'González Herrera',  '686-111-0001', 'Calle 1a #100, Mexicali',       1, '2023-01-15'),
+  ( 2, 'Carlos',   'Ramírez López',     '664-111-0002', 'Av. Revolución #200, Tijuana',  2, '2023-03-22'),
+  ( 3, 'Fernanda', 'Torres Ávila',      '646-111-0003', 'Calle 2a #300, Ensenada',        3, '2023-05-10'),
+  ( 4, 'Luis',     'Morales Fuentes',   '686-111-0004', 'Blvd. UABC #400, Mexicali',      4, '2023-06-01'),
+  ( 5, 'Ana',      'Castillo Vega',     '661-111-0005', 'Calle 3a #500, Rosarito',        5, '2023-07-14'),
+  ( 6, 'Roberto',  'Sánchez Mendoza',   '665-111-0006', 'Av. Juárez #600, Tecate',        6, '2023-08-30'),
+  ( 7, 'Laura',    'Díaz Contreras',    '686-111-0007', 'Calle 4a #700, Mexicali',        1, '2023-09-05'),
+  ( 8, 'Miguel',   'Reyes Espinoza',    '664-111-0008', 'Blvd. Díaz Ordaz #800, Tijuana', 2, '2023-10-18'),
+  ( 9, 'Paola',    'Flores Gutiérrez',  '686-111-0009', 'Calzada UABC #900, Mexicali',    4, '2024-01-07'),
+  (10, 'Diego',    'Vargas Ontiveros',  '646-111-0010', 'Calle 5a #1000, Ensenada',       3, '2024-02-20');
 
 ALTER TABLE UsuarioPerfil AUTO_INCREMENT = 100;
 

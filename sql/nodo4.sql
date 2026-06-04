@@ -12,41 +12,30 @@ CREATE DATABASE IF NOT EXISTS biblioteca_nodo4
 USE biblioteca_nodo4;
 
 -- ─────────────────────────────────────────────────────────────
--- FRAGMENTACIÓN VERTICAL de Usuario — 2 fragmentos
--- Basado en convergencia BEA/MAC/MFA/MAA: cluster {id,email,multas}
--- Fragmento H: id_sucursal_registro = 4
+-- FRAGMENTO VERTICAL DISTRIBUIDO: UsuarioAcceso (TODOS los usuarios)
+-- Nodo 4 almacena el fragmento Acceso de los 10 usuarios.
+-- El fragmento Perfil (nombre, dirección, sucursal) está en Nodo 1.
+-- Reconstrucción: app-side merge {Perfil Nodo1} + {Acceso Nodo4}
+-- NOTA: Sin FK a UsuarioPerfil (tabla en otro nodo). Integridad vía app.
 -- ─────────────────────────────────────────────────────────────
 
--- Fragmento Vertical 1: UsuarioPerfil (identidad + ubicación)
-CREATE TABLE IF NOT EXISTS UsuarioPerfil (
-  id_usuario           INT          PRIMARY KEY AUTO_INCREMENT,
-  nombre               VARCHAR(100) NOT NULL,
-  apellidos            VARCHAR(100),
-  telefono             VARCHAR(20),
-  direccion            VARCHAR(200),
-  id_sucursal_registro INT          NOT NULL DEFAULT 4,
-  fecha_registro       DATE,
-  CONSTRAINT chk_uperfil_sucursal CHECK (id_sucursal_registro = 4),
-  FOREIGN KEY (id_sucursal_registro) REFERENCES Sucursal(id_sucursal)
-);
-
--- Fragmento Vertical 2: UsuarioAcceso (email + multas — cluster de alto acceso)
 CREATE TABLE IF NOT EXISTS UsuarioAcceso (
   id_usuario        INT           PRIMARY KEY,
   email             VARCHAR(150),
-  multas_acumuladas DECIMAL(10,2) DEFAULT 0.00,
-  FOREIGN KEY (id_usuario) REFERENCES UsuarioPerfil(id_usuario)
+  multas_acumuladas DECIMAL(10,2) DEFAULT 0.00
 );
 
-INSERT IGNORE INTO UsuarioPerfil (id_usuario, nombre, apellidos, telefono, id_sucursal_registro, fecha_registro) VALUES
-  (4, 'Luis',  'Morales Fuentes',  '686-111-0004', 4, '2023-06-01'),
-  (9, 'Paola', 'Flores Gutiérrez', '686-111-0009', 4, '2024-01-07');
-
 INSERT IGNORE INTO UsuarioAcceso (id_usuario, email, multas_acumuladas) VALUES
-  (4, 'lmorales@email.com', 50.00),
-  (9, 'pflores@email.com',   0.00);
-
-ALTER TABLE UsuarioPerfil AUTO_INCREMENT = 100;
+  ( 1, 'mgonzalez@email.com',   0.00),
+  ( 2, 'cramirez@email.com',   25.00),
+  ( 3, 'ftorres@email.com',     0.00),
+  ( 4, 'lmorales@email.com',   50.00),
+  ( 5, 'acastillo@email.com',   0.00),
+  ( 6, 'rsanchez@email.com',    0.00),
+  ( 7, 'ldiaz@email.com',      75.00),
+  ( 8, 'mreyes@email.com',      0.00),
+  ( 9, 'pflores@email.com',     0.00),
+  (10, 'dvargas@email.com',     0.00);
 
 -- ─────────────────────────────────────────────────────────────
 -- FRAGMENTO HORIZONTAL: Inventario (id_sucursal = 4)

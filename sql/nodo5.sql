@@ -11,39 +11,12 @@ CREATE DATABASE IF NOT EXISTS biblioteca_nodo5
 USE biblioteca_nodo5;
 
 -- ─────────────────────────────────────────────────────────────
--- FRAGMENTACIÓN VERTICAL de Usuario — 2 fragmentos
--- Basado en convergencia BEA/MAC/MFA/MAA: cluster {id,email,multas}
--- Fragmento H: id_sucursal_registro = 5
+-- NOTA: Las tablas UsuarioPerfil y UsuarioAcceso NO existen aquí.
+-- Fragmentación vertical distribuida concentrada en 2 nodos:
+--   - UsuarioPerfil → Nodo 1 (Mexicali Centro)
+--   - UsuarioAcceso → Nodo 4 (Mexicali Universidad)
+-- Las consultas de usuario se hacen remotamente desde la app.
 -- ─────────────────────────────────────────────────────────────
-
--- Fragmento Vertical 1: UsuarioPerfil (identidad + ubicación)
-CREATE TABLE IF NOT EXISTS UsuarioPerfil (
-  id_usuario           INT          PRIMARY KEY AUTO_INCREMENT,
-  nombre               VARCHAR(100) NOT NULL,
-  apellidos            VARCHAR(100),
-  telefono             VARCHAR(20),
-  direccion            VARCHAR(200),
-  id_sucursal_registro INT          NOT NULL DEFAULT 5,
-  fecha_registro       DATE,
-  CONSTRAINT chk_uperfil_sucursal CHECK (id_sucursal_registro = 5),
-  FOREIGN KEY (id_sucursal_registro) REFERENCES Sucursal(id_sucursal)
-);
-
--- Fragmento Vertical 2: UsuarioAcceso (email + multas — cluster de alto acceso)
-CREATE TABLE IF NOT EXISTS UsuarioAcceso (
-  id_usuario        INT           PRIMARY KEY,
-  email             VARCHAR(150),
-  multas_acumuladas DECIMAL(10,2) DEFAULT 0.00,
-  FOREIGN KEY (id_usuario) REFERENCES UsuarioPerfil(id_usuario)
-);
-
-INSERT IGNORE INTO UsuarioPerfil (id_usuario, nombre, apellidos, telefono, id_sucursal_registro, fecha_registro) VALUES
-  (5, 'Ana', 'Castillo Vega', '661-111-0005', 5, '2023-07-14');
-
-INSERT IGNORE INTO UsuarioAcceso (id_usuario, email, multas_acumuladas) VALUES
-  (5, 'acastillo@email.com', 0.00);
-
-ALTER TABLE UsuarioPerfil AUTO_INCREMENT = 100;
 
 -- ─────────────────────────────────────────────────────────────
 -- FRAGMENTO HORIZONTAL: Inventario (id_sucursal = 5)
