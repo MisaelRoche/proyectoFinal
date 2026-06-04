@@ -58,7 +58,7 @@ export default function Usuarios() {
                   <td className="text-muted">{u.fecha_registro}</td>
                   <td>
                     {u.multas_acumuladas > 0
-                      ? <span className="text-danger">${u.multas_acumuladas.toFixed(2)}</span>
+                      ? <span className="text-danger">${Number(u.multas_acumuladas).toFixed(2)}</span>
                       : <span className="text-muted">$0.00</span>
                     }
                   </td>
@@ -85,7 +85,7 @@ export default function Usuarios() {
             {selected.email} · {selected.sucursal_nombre}
             {selected.multas_acumuladas > 0 &&
               <span style={{ marginLeft: '1rem' }} className="text-danger">
-                Multas acumuladas: ${selected.multas_acumuladas.toFixed(2)}
+                Multas acumuladas: ${Number(selected.multas_acumuladas).toFixed(2)}
               </span>
             }
           </div>

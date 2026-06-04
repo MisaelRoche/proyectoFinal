@@ -14,13 +14,18 @@ function enrich(u) {
 // GET /api/usuarios?distribuido=1
 // Sin distribuido → solo usuarios de este nodo (fragmento local)
 // Con distribuido=1 → fan-out a todos los nodos
+// Reconstruye desde los 2 fragmentos verticales (UsuarioPerfil + UsuarioAcceso)
 router.get('/', async (req, res) => {
   try {
     const sql = `
-      SELECT u.*, s.nombre AS sucursal_nombre
-      FROM Usuario u
-      JOIN Sucursal s ON u.id_sucursal_registro = s.id_sucursal
-      ORDER BY u.id_usuario
+      SELECT up.id_usuario, up.nombre, up.apellidos, up.telefono, up.direccion,
+             up.id_sucursal_registro, up.fecha_registro,
+             ua.email, ua.multas_acumuladas,
+             s.nombre AS sucursal_nombre
+      FROM UsuarioPerfil up
+      JOIN UsuarioAcceso ua ON up.id_usuario = ua.id_usuario
+      JOIN Sucursal s ON up.id_sucursal_registro = s.id_sucursal
+      ORDER BY up.id_usuario
     `
 
     const rows = req.query.distribuido === '1'
@@ -35,14 +40,19 @@ router.get('/', async (req, res) => {
 
 // GET /api/usuarios/:id
 // Busca primero en local; si no está, consulta el nodo correcto por sucursal.
+// Reconstruye desde los 2 fragmentos verticales (UsuarioPerfil + UsuarioAcceso)
 router.get('/:id', async (req, res) => {
   try {
     const idUsuario = Number(req.params.id)
     const sql = `
-      SELECT u.*, s.nombre AS sucursal_nombre
-      FROM Usuario u
-      JOIN Sucursal s ON u.id_sucursal_registro = s.id_sucursal
-      WHERE u.id_usuario = ?
+      SELECT up.id_usuario, up.nombre, up.apellidos, up.telefono, up.direccion,
+             up.id_sucursal_registro, up.fecha_registro,
+             ua.email, ua.multas_acumuladas,
+             s.nombre AS sucursal_nombre
+      FROM UsuarioPerfil up
+      JOIN UsuarioAcceso ua ON up.id_usuario = ua.id_usuario
+      JOIN Sucursal s ON up.id_sucursal_registro = s.id_sucursal
+      WHERE up.id_usuario = ?
     `
 
     // Intentar local
@@ -68,11 +78,11 @@ router.get('/:id/prestamos', async (req, res) => {
   try {
     const idUsuario = Number(req.params.id)
 
-    // Verificar que el usuario existe
-    const sqlUsuario = 'SELECT id_usuario FROM Usuario WHERE id_usuario = ?'
+    // Verificar que el usuario existe (Q5: solo escanea UsuarioPerfil, sin email ni multas)
+    const sqlUsuario = 'SELECT id_usuario FROM UsuarioPerfil WHERE id_usuario = ?'
     let [u] = await queryLocal(sqlUsuario, [idUsuario])
     if (!u) {
-      const remoto = await queryTodos(sqlUsuario, [idUsuario])
+      const remoto = await queryTodos('SELECT id_usuario FROM UsuarioPerfil WHERE id_usuario = ?', [idUsuario])
       u = remoto[0]
     }
     if (!u) return res.status(404).json({ message: 'Usuario no encontrado' })

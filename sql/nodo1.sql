@@ -75,27 +75,41 @@ INSERT IGNORE INTO Libro (id_libro, isbn, titulo, autor, editorial, anio, id_cat
   (12, '978-607-01-0012-2', 'Arquitectura Prehispánica',          'Paul Gendrop',            'Trillas',             2001, 6, 220);
 
 -- ─────────────────────────────────────────────────────────────
--- FRAGMENTO HORIZONTAL: Usuario (id_sucursal_registro = 1)
+-- FRAGMENTACIÓN VERTICAL de Usuario — 2 fragmentos
+-- Basado en convergencia BEA/MAC/MFA/MAA: cluster {id,email,multas}
+-- Fragmento H: id_sucursal_registro = 1
 -- ─────────────────────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS Usuario (
+
+-- Fragmento Vertical 1: UsuarioPerfil (identidad + ubicación)
+CREATE TABLE IF NOT EXISTS UsuarioPerfil (
   id_usuario           INT          PRIMARY KEY AUTO_INCREMENT,
   nombre               VARCHAR(100) NOT NULL,
   apellidos            VARCHAR(100),
-  email                VARCHAR(150),
   telefono             VARCHAR(20),
   direccion            VARCHAR(200),
   id_sucursal_registro INT          NOT NULL DEFAULT 1,
   fecha_registro       DATE,
-  multas_acumuladas    DECIMAL(10,2) DEFAULT 0.00,
-  CONSTRAINT chk_usuario_sucursal CHECK (id_sucursal_registro = 1),
+  CONSTRAINT chk_uperfil_sucursal CHECK (id_sucursal_registro = 1),
   FOREIGN KEY (id_sucursal_registro) REFERENCES Sucursal(id_sucursal)
 );
 
-INSERT IGNORE INTO Usuario (id_usuario, nombre, apellidos, email, telefono, id_sucursal_registro, fecha_registro, multas_acumuladas) VALUES
-  (1, 'María',  'González Herrera', 'mgonzalez@email.com', '686-111-0001', 1, '2023-01-15',  0.00),
-  (7, 'Laura',  'Díaz Contreras',   'ldiaz@email.com',     '686-111-0007', 1, '2023-09-05', 75.00);
+-- Fragmento Vertical 2: UsuarioAcceso (email + multas — cluster de alto acceso)
+CREATE TABLE IF NOT EXISTS UsuarioAcceso (
+  id_usuario        INT           PRIMARY KEY,
+  email             VARCHAR(150),
+  multas_acumuladas DECIMAL(10,2) DEFAULT 0.00,
+  FOREIGN KEY (id_usuario) REFERENCES UsuarioPerfil(id_usuario)
+);
 
-ALTER TABLE Usuario AUTO_INCREMENT = 100;
+INSERT IGNORE INTO UsuarioPerfil (id_usuario, nombre, apellidos, telefono, id_sucursal_registro, fecha_registro) VALUES
+  (1, 'María', 'González Herrera', '686-111-0001', 1, '2023-01-15'),
+  (7, 'Laura', 'Díaz Contreras',   '686-111-0007', 1, '2023-09-05');
+
+INSERT IGNORE INTO UsuarioAcceso (id_usuario, email, multas_acumuladas) VALUES
+  (1, 'mgonzalez@email.com',  0.00),
+  (7, 'ldiaz@email.com',     75.00);
+
+ALTER TABLE UsuarioPerfil AUTO_INCREMENT = 100;
 
 -- ─────────────────────────────────────────────────────────────
 -- FRAGMENTO HORIZONTAL: Inventario (id_sucursal = 1)

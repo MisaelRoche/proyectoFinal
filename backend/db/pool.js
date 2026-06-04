@@ -24,6 +24,7 @@ function getPool(idNodo) {
         password: nodo.password,
         database: nodo.database,   // cada nodo tiene su propia BD con nombre distinto
         port:     DB.port,
+        charset:  'utf8mb4',       // forzar utf8mb4 para acentos y ñ
         waitForConnections: true,
         connectionLimit:    5,
         connectTimeout:     4000,
@@ -76,12 +77,22 @@ export async function queryTodos(sql, params = []) {
 
 /**
  * Busca un usuario por id_usuario en todos los nodos (local primero).
+ * Reconstruye el usuario desde los 2 fragmentos verticales (UsuarioPerfil + UsuarioAcceso).
  * Devuelve { usuario, idNodo } o null si no se encuentra.
  */
 export async function buscarUsuario(idUsuario) {
+  const sqlReconstruir = `
+    SELECT up.id_usuario, up.nombre, up.apellidos, up.telefono, up.direccion,
+           up.id_sucursal_registro, up.fecha_registro,
+           ua.email, ua.multas_acumuladas
+    FROM UsuarioPerfil up
+    JOIN UsuarioAcceso ua ON up.id_usuario = ua.id_usuario
+    WHERE up.id_usuario = ?
+  `
+
   // Intentar local primero (caso más frecuente)
   try {
-    const rows = await queryLocal('SELECT * FROM Usuario WHERE id_usuario = ?', [idUsuario])
+    const rows = await queryLocal(sqlReconstruir, [idUsuario])
     if (rows.length > 0) return { usuario: rows[0], idNodo: MI_NODO }
   } catch (_) { /* nodo local caído — poco probable */ }
 
@@ -92,10 +103,10 @@ export async function buscarUsuario(idUsuario) {
 
   for (const idNodo of otrosNodos) {
     try {
-      const rows = await queryNodo(idNodo, 'SELECT * FROM Usuario WHERE id_usuario = ?', [idUsuario])
+      const rows = await queryNodo(idNodo, sqlReconstruir, [idUsuario])
       if (rows.length > 0) return { usuario: rows[0], idNodo }
     } catch (_) {
-      console.warn(`[pool] No se pudo consultar Usuario en Nodo ${idNodo}`)
+      console.warn(`[pool] No se pudo consultar UsuarioPerfil en Nodo ${idNodo}`)
     }
   }
   return null
