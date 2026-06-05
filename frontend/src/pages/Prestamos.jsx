@@ -1,6 +1,11 @@
 import { useEffect, useState } from 'react'
 import { get, post, put } from '../api/client'
 
+function formatDate(iso) {
+  if (!iso) return '—'
+  return iso.split('T')[0]
+}
+
 export default function Prestamos() {
   const [tab, setTab] = useState('activos')
 
@@ -88,9 +93,9 @@ function TabActivos() {
                   <td style={{ fontWeight: 500 }}>{p.usuario_nombre}</td>
                   <td>{p.libro_titulo}</td>
                   <td>{p.sucursal_nombre}</td>
-                  <td className="text-muted">{p.fecha_prestamo}</td>
+                  <td className="text-muted">{formatDate(p.fecha_prestamo)}</td>
                   <td className={new Date(p.fecha_devolucion_esperada) < new Date() ? 'text-danger' : 'text-muted'}>
-                    {p.fecha_devolucion_esperada}
+                    {formatDate(p.fecha_devolucion_esperada)}
                   </td>
                   <td>{estatusBadge(p)}</td>
                   <td>{p.multa > 0 ? <span className="text-danger">${p.multa}</span> : '—'}</td>
@@ -144,7 +149,7 @@ function TabNuevo() {
       id_sucursal: Number(form.id_sucursal),
     })
       .then(p => {
-        setMsg({ type: 'success', text: `Préstamo #${p.id_prestamo} creado. Devolución esperada: ${p.fecha_devolucion_esperada}` })
+        setMsg({ type: 'success', text: `Préstamo #${p.id_prestamo} creado. Devolución esperada: ${formatDate(p.fecha_devolucion_esperada)}` })
         setForm({ id_usuario: '', id_libro: '', id_sucursal: '' })
       })
       .catch(e => setMsg({ type: 'error', text: e.message }))
@@ -234,9 +239,9 @@ function TabHistorial() {
               <td style={{ fontWeight: 500 }}>{p.usuario_nombre}</td>
               <td>{p.libro_titulo}</td>
               <td>{p.sucursal_nombre}</td>
-              <td className="text-muted">{p.fecha_prestamo}</td>
-              <td className="text-muted">{p.fecha_devolucion_esperada}</td>
-              <td className="text-muted">{p.fecha_devolucion_real}</td>
+              <td className="text-muted">{formatDate(p.fecha_prestamo)}</td>
+              <td className="text-muted">{formatDate(p.fecha_devolucion_esperada)}</td>
+              <td className="text-muted">{formatDate(p.fecha_devolucion_real)}</td>
               <td>{p.multa > 0 ? <span className="text-danger">${p.multa}</span> : <span className="badge badge-green">Sin multa</span>}</td>
             </tr>
           ))}
@@ -256,11 +261,6 @@ function TabTodosNodos() {
       .then(setPrestamos)
       .finally(() => setLoading(false))
   }, [])
-
-  function formatDate(dateString) {
-    if (!dateString) return '—'
-    return dateString.split('T')[0]
-  }
 
   function estatusBadge(estatus) {
     if (estatus === 'activo') return <span className="badge badge-green">Activo</span>
