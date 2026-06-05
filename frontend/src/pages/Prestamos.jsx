@@ -255,6 +255,11 @@ function TabTodosNodos() {
       .finally(() => setLoading(false))
   }, [])
 
+  function formatDate(dateString) {
+    if (!dateString) return '—'
+    return dateString.split('T')[0]
+  }
+
   function estatusBadge(estatus) {
     if (estatus === 'activo') return <span className="badge badge-green">Activo</span>
     if (estatus === 'vencido') return <span className="badge badge-red">Vencido</span>
@@ -294,11 +299,11 @@ function TabTodosNodos() {
                 <td style={{ fontWeight: 500 }}>{p.usuario_nombre}</td>
                 <td>{p.libro_titulo}</td>
                 <td>{p.sucursal_nombre}</td>
-                <td className="text-muted">{p.fecha_prestamo}</td>
+                <td className="text-muted">{formatDate(p.fecha_prestamo)}</td>
                 <td className={new Date(p.fecha_devolucion_esperada) < new Date() ? 'text-danger' : 'text-muted'}>
-                  {p.fecha_devolucion_esperada}
+                  {formatDate(p.fecha_devolucion_esperada)}
                 </td>
-                <td className="text-muted">{p.fecha_devolucion_real ?? '—'}</td>
+                <td className="text-muted">{formatDate(p.fecha_devolucion_real)}</td>
                 <td>{estatusBadge(p.estatus)}</td>
                 <td>{p.multa > 0 ? <span className="text-danger">${p.multa}</span> : '—'}</td>
               </tr>
