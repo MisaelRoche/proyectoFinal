@@ -13,12 +13,14 @@ export default function Prestamos() {
         <button className={`tab-btn ${tab === 'nuevo'    ? 'active' : ''}`} onClick={() => setTab('nuevo')}>Nuevo Préstamo</button>
         <button className={`tab-btn ${tab === 'historial'? 'active' : ''}`} onClick={() => setTab('historial')}>Historial</button>
         <button className={`tab-btn ${tab === 'todos'    ? 'active' : ''}`} onClick={() => setTab('todos')}>Todos los Nodos</button>
+        <button className={`tab-btn ${tab === 'federado' ? 'active' : ''}`} onClick={() => setTab('federado')}>Nodo 1 + 2</button>
       </div>
 
       {tab === 'activos'   && <TabActivos />}
       {tab === 'nuevo'     && <TabNuevo />}
       {tab === 'historial' && <TabHistorial />}
       {tab === 'todos'     && <TabTodosNodos />}
+      {tab === 'federado'  && <TabFederado />}
     </div>
   )
 }
@@ -304,6 +306,73 @@ function TabTodosNodos() {
                   {formatDate(p.fecha_devolucion_esperada)}
                 </td>
                 <td className="text-muted">{formatDate(p.fecha_devolucion_real)}</td>
+                <td>{estatusBadge(p.estatus)}</td>
+                <td>{p.multa > 0 ? <span className="text-danger">${p.multa}</span> : '—'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+/* ─── Tab 5: Nodo 1 + 2 (FEDERATED) ───────────────────── */
+function TabFederado() {
+  const [datos, setDatos] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+
+  useEffect(() => {
+    get('/prestamos/nodo2')
+      .then(r => setDatos(r.datos))
+      .catch(e => setError(e.message))
+      .finally(() => setLoading(false))
+  }, [])
+
+  function formatDate(dateString) {
+    if (!dateString) return '—'
+    return dateString.split('T')[0]
+  }
+
+  function estatusBadge(estatus) {
+    if (estatus === 'activo') return <span className="badge badge-green">Activo</span>
+    if (estatus === 'vencido') return <span className="badge badge-red">Vencido</span>
+    return <span className="badge badge-gray">Devuelto</span>
+  }
+
+  if (loading) return <p className="loading-msg">Consultando Nodo 1 + Nodo 2 (FEDERATED)...</p>
+  if (error) return <div className="alert alert-error">{error}</div>
+  if (datos.length === 0) return <p className="empty-msg">Sin resultados del JOIN federado.</p>
+
+  return (
+    <div>
+      <p className="text-muted" style={{ marginBottom: '1rem', fontSize: '0.85rem' }}>
+        JOIN federado: <strong>UsuarioPerfil (Nodo 1)</strong> + <strong>Prestamo (Nodo 2)</strong> — {datos.length} préstamos en Tijuana
+      </p>
+      <div className="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Usuario</th>
+              <th>Libro</th>
+              <th>Préstamo</th>
+              <th>Dev. Esperada</th>
+              <th>Estatus</th>
+              <th>Multa</th>
+            </tr>
+          </thead>
+          <tbody>
+            {datos.map(p => (
+              <tr key={p.id_prestamo}>
+                <td className="text-muted">{p.id_prestamo}</td>
+                <td style={{ fontWeight: 500 }}>{p.nombre} {p.apellidos}</td>
+                <td>{p.libro_titulo}</td>
+                <td className="text-muted">{formatDate(p.fecha_prestamo)}</td>
+                <td className={new Date(p.fecha_devolucion_esperada) < new Date() ? 'text-danger' : 'text-muted'}>
+                  {formatDate(p.fecha_devolucion_esperada)}
+                </td>
                 <td>{estatusBadge(p.estatus)}</td>
                 <td>{p.multa > 0 ? <span className="text-danger">${p.multa}</span> : '—'}</td>
               </tr>

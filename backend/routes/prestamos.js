@@ -80,6 +80,34 @@ router.get('/', async (req, res) => {
   }
 })
 
+// GET /api/prestamos/nodo2 — JOIN federado UsuarioPerfil (Nodo 1) + Prestamo (Nodo 2)
+router.get('/nodo2', async (req, res) => {
+  try {
+    const filas = await queryLocal(`
+      SELECT u.nombre, u.apellidos,
+             p.id_prestamo, p.id_libro,
+             p.fecha_prestamo, p.fecha_devolucion_esperada,
+             p.estatus, p.multa
+      FROM UsuarioPerfil_nodo1 u
+      JOIN Prestamo_nodo2 p ON u.id_usuario = p.id_usuario
+    `)
+
+    const libros = await queryLocal('SELECT id_libro, titulo FROM Libro')
+
+    const resultado = filas.map(f => ({
+      ...f,
+      libro_titulo: libros.find(l => l.id_libro === f.id_libro)?.titulo || '',
+      sucursal_nombre: 'Tijuana',
+      multa: Number(f.multa) || 0,
+    }))
+
+    res.json({ modo: 'federado', nodos: [1, 2], total: resultado.length, datos: resultado })
+  } catch (err) {
+    console.error('[prestamos nodo2 federado]', err)
+    res.status(500).json({ message: 'Error en consulta federada Nodo1+Nodo2', detail: err.message })
+  }
+})
+
 // GET /api/prestamos/:id
 router.get('/:id', async (req, res) => {
   try {
