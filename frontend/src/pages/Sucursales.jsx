@@ -56,10 +56,10 @@ export default function Sucursales() {
     <div>
       <h1 className="page-title">Sucursales</h1>
 
-      <p className="text-muted" style={{ marginBottom: '1rem', fontSize: '0.85rem' }}>
+      {/* <p className="text-muted" style={{ marginBottom: '1rem', fontSize: '0.85rem' }}>
         Tabla <strong>replicada</strong> — al guardar, el cambio se propaga a los 6 nodos en paralelo.
         Los demás usuarios lo verán al recargar la página.
-      </p>
+      </p> */}
 
       {editMsg && (
         <div

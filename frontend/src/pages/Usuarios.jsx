@@ -67,6 +67,11 @@ export default function Usuarios() {
       .finally(() => setSaving(false))
   }
 
+  function formatDate(iso) {
+    if (!iso) return '—'
+    return iso.split('T')[0]
+  }
+
   function estatusBadge(estatus) {
     if (estatus === 'activo')   return <span className="badge badge-green">Activo</span>
     if (estatus === 'vencido')  return <span className="badge badge-red">Vencido</span>
@@ -157,7 +162,7 @@ export default function Usuarios() {
                   <td className="text-muted">{u.email}</td>
                   <td>{u.telefono}</td>
                   <td>{u.sucursal_nombre}</td>
-                  <td className="text-muted">{u.fecha_registro}</td>
+                  <td className="text-muted">{formatDate(u.fecha_registro)}</td>
                   <td>
                     {u.multas_acumuladas > 0
                       ? <span className="text-danger">${Number(u.multas_acumuladas).toFixed(2)}</span>
