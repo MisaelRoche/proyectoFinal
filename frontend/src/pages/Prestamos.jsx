@@ -12,11 +12,13 @@ export default function Prestamos() {
         <button className={`tab-btn ${tab === 'activos'  ? 'active' : ''}`} onClick={() => setTab('activos')}>Activos / Vencidos</button>
         <button className={`tab-btn ${tab === 'nuevo'    ? 'active' : ''}`} onClick={() => setTab('nuevo')}>Nuevo Préstamo</button>
         <button className={`tab-btn ${tab === 'historial'? 'active' : ''}`} onClick={() => setTab('historial')}>Historial</button>
+        <button className={`tab-btn ${tab === 'todos'    ? 'active' : ''}`} onClick={() => setTab('todos')}>Todos los Nodos</button>
       </div>
 
       {tab === 'activos'   && <TabActivos />}
       {tab === 'nuevo'     && <TabNuevo />}
       {tab === 'historial' && <TabHistorial />}
+      {tab === 'todos'     && <TabTodosNodos />}
     </div>
   )
 }
@@ -238,6 +240,72 @@ function TabHistorial() {
           ))}
         </tbody>
       </table>
+    </div>
+  )
+}
+
+/* ─── Tab 4: Todos los Nodos ────────────────────────────── */
+function TabTodosNodos() {
+  const [prestamos, setPrestamos] = useState([])
+  const [loading, setLoading]     = useState(true)
+
+  useEffect(() => {
+    get('/prestamos?distribuido=1')
+      .then(setPrestamos)
+      .finally(() => setLoading(false))
+  }, [])
+
+  function estatusBadge(estatus) {
+    if (estatus === 'activo') return <span className="badge badge-green">Activo</span>
+    if (estatus === 'vencido') return <span className="badge badge-red">Vencido</span>
+    return <span className="badge badge-gray">Devuelto</span>
+  }
+
+  return loading ? (
+    <p className="loading-msg">Cargando préstamos de todos los nodos...</p>
+  ) : prestamos.length === 0 ? (
+    <p className="empty-msg">Sin préstamos registrados en los 6 nodos.</p>
+  ) : (
+    <div>
+      <p className="text-muted" style={{ marginBottom: '1rem', fontSize: '0.85rem' }}>
+        Total de préstamos: <strong>{prestamos.length}</strong> (de todos los nodos)
+      </p>
+      <div className="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>Nodo</th>
+              <th>#</th>
+              <th>Usuario</th>
+              <th>Libro</th>
+              <th>Sucursal</th>
+              <th>Préstamo</th>
+              <th>Dev. Esperada</th>
+              <th>Devuelto</th>
+              <th>Estatus</th>
+              <th>Multa</th>
+            </tr>
+          </thead>
+          <tbody>
+            {prestamos.map(p => (
+              <tr key={`${p._nodo}-${p.id_prestamo}`}>
+                <td className="text-muted" style={{ fontWeight: 500 }}>Nodo {p._nodo}</td>
+                <td className="text-muted">{p.id_prestamo}</td>
+                <td style={{ fontWeight: 500 }}>{p.usuario_nombre}</td>
+                <td>{p.libro_titulo}</td>
+                <td>{p.sucursal_nombre}</td>
+                <td className="text-muted">{p.fecha_prestamo}</td>
+                <td className={new Date(p.fecha_devolucion_esperada) < new Date() ? 'text-danger' : 'text-muted'}>
+                  {p.fecha_devolucion_esperada}
+                </td>
+                <td className="text-muted">{p.fecha_devolucion_real ?? '—'}</td>
+                <td>{estatusBadge(p.estatus)}</td>
+                <td>{p.multa > 0 ? <span className="text-danger">${p.multa}</span> : '—'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }

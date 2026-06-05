@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { queryLocal, queryTodos, queryNodo } from '../db/pool.js'
+import { queryLocal, queryTodos, queryNodo, nodoDeSucursal } from '../db/pool.js'
 
 const router = Router()
 
@@ -131,6 +131,44 @@ router.get('/admin/costos', async (req, res) => {
     res.json(rows)
   } catch (err) {
     res.status(503).json({ message: 'Nodo 4 (Mexicali Universidad) no disponible', detail: err.message })
+  }
+})
+
+// PUT /api/libros/:idLibro/inventario/:idSucursal
+// Edita el fragmento Inventario en el nodo dueño de esa sucursal (escritura remota).
+router.put('/:idLibro/inventario/:idSucursal', async (req, res) => {
+  try {
+    const idLibro    = Number(req.params.idLibro)
+    const idSucursal = Number(req.params.idSucursal)
+    const { copias_totales, copias_disponibles, ubicacion_fisica } = req.body
+
+    if (copias_totales === undefined || copias_disponibles === undefined) {
+      return res.status(400).json({ message: 'Faltan campos: copias_totales, copias_disponibles' })
+    }
+    if (Number(copias_disponibles) > Number(copias_totales)) {
+      return res.status(400).json({ message: 'copias_disponibles no puede ser mayor que copias_totales' })
+    }
+
+    const idNodo = nodoDeSucursal(idSucursal)   // relación 1:1 sucursal↔nodo
+
+    const result = await queryNodo(
+      idNodo,
+      `UPDATE Inventario
+       SET copias_totales = ?, copias_disponibles = ?, ubicacion_fisica = ?
+       WHERE id_libro = ? AND id_sucursal = ?`,
+      [Number(copias_totales), Number(copias_disponibles), ubicacion_fisica ?? null, idLibro, idSucursal]
+    )
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: 'No existe inventario de ese libro en esa sucursal' })
+    }
+
+    res.json({ ok: true, id_libro: idLibro, id_sucursal: idSucursal, id_nodo: idNodo })
+  } catch (err) {
+    const msg = err.message.includes('ECONNREFUSED') || err.message.includes('connect')
+      ? `Nodo de sucursal ${req.params.idSucursal} no disponible`
+      : 'Error al actualizar inventario'
+    res.status(503).json({ message: msg, detail: err.message })
   }
 })
 

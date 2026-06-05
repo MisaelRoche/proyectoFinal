@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { get } from '../api/client'
+import { get, put } from '../api/client'
 
 export default function Catalogo() {
   const [libros, setLibros]           = useState([])
@@ -9,6 +9,9 @@ export default function Catalogo() {
   const [selected, setSelected]       = useState(null)
   const [disponibilidad, setDisp]     = useState([])
   const [loadingDisp, setLoadingDisp] = useState(false)
+  const [editandoInv, setEditandoInv] = useState(null)   // { id_sucursal, copias_totales, copias_disponibles, ubicacion_fisica }
+  const [savingInv, setSavingInv]     = useState(false)
+  const [invMsg, setInvMsg]           = useState(null)
 
   useEffect(() => {
     Promise.all([
@@ -43,6 +46,34 @@ export default function Catalogo() {
     setFiltros({ titulo: '', autor: '', id_categoria: '' })
     setLoading(true)
     get('/libros').then(setLibros).finally(() => setLoading(false))
+  }
+
+  function iniciarEdicionInv(d) {
+    setInvMsg(null)
+    setEditandoInv({
+      id_sucursal:        d.id_sucursal,
+      copias_totales:     d.copias_totales,
+      copias_disponibles: d.copias_disponibles,
+      ubicacion_fisica:   d.ubicacion_fisica ?? '',
+    })
+  }
+
+  function guardarInv() {
+    if (!editandoInv || !selected) return
+    setSavingInv(true)
+    setInvMsg(null)
+    put(`/libros/${selected.id_libro}/inventario/${editandoInv.id_sucursal}`, {
+      copias_totales:     Number(editandoInv.copias_totales),
+      copias_disponibles: Number(editandoInv.copias_disponibles),
+      ubicacion_fisica:   editandoInv.ubicacion_fisica,
+    })
+      .then(r => {
+        setInvMsg({ type: 'success', text: `Inventario actualizado en Nodo ${r.id_nodo} (sucursal ${r.id_sucursal})` })
+        setEditandoInv(null)
+        verDisponibilidad(selected)   // recargar datos del panel
+      })
+      .catch(e => setInvMsg({ type: 'error', text: e.message }))
+      .finally(() => setSavingInv(false))
   }
 
   return (
@@ -139,8 +170,13 @@ export default function Catalogo() {
         <div className="side-panel">
           <div className="panel-header">
             <h3>Disponibilidad: {selected.titulo}</h3>
-            <button className="btn-secondary btn-sm" onClick={() => setSelected(null)}>Cerrar</button>
+            <button className="btn-secondary btn-sm" onClick={() => { setSelected(null); setEditandoInv(null); setInvMsg(null) }}>Cerrar</button>
           </div>
+          {invMsg && (
+            <div className={`alert alert-${invMsg.type === 'success' ? 'success' : 'error'}`} style={{ marginBottom: '0.75rem' }}>
+              {invMsg.text}
+            </div>
+          )}
           {loadingDisp ? (
             <p className="loading-msg">Cargando...</p>
           ) : (
@@ -153,22 +189,71 @@ export default function Catalogo() {
                     <th>Disponibles</th>
                     <th>Total</th>
                     <th>Ubicación</th>
+                    <th></th>
                   </tr>
                 </thead>
                 <tbody>
-                  {disponibilidad.map(d => (
-                    <tr key={d.id_sucursal}>
-                      <td>{d.sucursal}</td>
-                      <td>{d.ciudad}</td>
-                      <td>
-                        <span className={`badge ${d.copias_disponibles > 0 ? 'badge-green' : 'badge-red'}`}>
-                          {d.copias_disponibles}
-                        </span>
-                      </td>
-                      <td>{d.copias_totales}</td>
-                      <td className="text-muted">{d.ubicacion_fisica}</td>
-                    </tr>
-                  ))}
+                  {disponibilidad.map(d => {
+                    const editando = editandoInv?.id_sucursal === d.id_sucursal
+                    return (
+                      <tr key={d.id_sucursal}>
+                        <td>{d.sucursal}</td>
+                        <td>{d.ciudad}</td>
+                        <td>
+                          {editando ? (
+                            <input
+                              type="number" min="0"
+                              value={editandoInv.copias_disponibles}
+                              onChange={e => setEditandoInv(v => ({ ...v, copias_disponibles: e.target.value }))}
+                              style={{ width: 60 }}
+                            />
+                          ) : (
+                            <span className={`badge ${d.copias_disponibles > 0 ? 'badge-green' : 'badge-red'}`}>
+                              {d.copias_disponibles}
+                            </span>
+                          )}
+                        </td>
+                        <td>
+                          {editando ? (
+                            <input
+                              type="number" min="0"
+                              value={editandoInv.copias_totales}
+                              onChange={e => setEditandoInv(v => ({ ...v, copias_totales: e.target.value }))}
+                              style={{ width: 60 }}
+                            />
+                          ) : d.copias_totales}
+                        </td>
+                        <td>
+                          {editando ? (
+                            <input
+                              type="text"
+                              value={editandoInv.ubicacion_fisica}
+                              onChange={e => setEditandoInv(v => ({ ...v, ubicacion_fisica: e.target.value }))}
+                              style={{ width: 100 }}
+                            />
+                          ) : (
+                            <span className="text-muted">{d.ubicacion_fisica}</span>
+                          )}
+                        </td>
+                        <td>
+                          {editando ? (
+                            <div style={{ display: 'flex', gap: '0.3rem' }}>
+                              <button className="btn-success btn-sm" onClick={guardarInv} disabled={savingInv}>
+                                {savingInv ? '...' : 'Guardar'}
+                              </button>
+                              <button className="btn-secondary btn-sm" onClick={() => { setEditandoInv(null); setInvMsg(null) }}>
+                                Cancelar
+                              </button>
+                            </div>
+                          ) : (
+                            <button className="btn-primary btn-sm" onClick={() => iniciarEdicionInv(d)}>
+                              Editar
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>

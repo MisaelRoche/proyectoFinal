@@ -19,8 +19,12 @@ export async function post(path, body) {
   return res.json()
 }
 
-export async function put(path) {
-  const res = await fetch(`${BASE}${path}`, { method: 'PUT' })
+export async function put(path, body) {
+  const res = await fetch(`${BASE}${path}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  })
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
     throw new Error(err.message || `HTTP ${res.status}`)

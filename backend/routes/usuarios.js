@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { queryTodos, queryPerfil, queryAcceso, buscarPerfil } from '../db/pool.js'
+import { queryTodos, queryPerfil, queryAcceso, buscarPerfil, buscarUsuario } from '../db/pool.js'
 
 const router = Router()
 
@@ -100,6 +100,54 @@ router.get('/:id/prestamos', async (req, res) => {
     res.json(prestamos)
   } catch (err) {
     res.status(500).json({ message: 'Error al obtener préstamos del usuario', detail: err.message })
+  }
+})
+
+// PUT /api/usuarios/:id
+// Edita UsuarioPerfil en Nodo 1 y UsuarioAcceso en Nodo 4 en paralelo.
+// Usa Promise.allSettled → si un nodo está caído, el otro igual se guarda.
+router.put('/:id', async (req, res) => {
+  try {
+    const id = Number(req.params.id)
+    const { nombre, apellidos, telefono, direccion, email, multas_acumuladas } = req.body
+
+    if (!nombre || !apellidos) {
+      return res.status(400).json({ message: 'Faltan campos obligatorios: nombre, apellidos' })
+    }
+
+    // Verificar que el usuario existe antes de intentar actualizar
+    const existe = await buscarPerfil(id)
+    if (!existe) {
+      return res.status(404).json({ message: `Usuario ${id} no encontrado` })
+    }
+
+    // Escritura distribuida en paralelo:
+    //   Nodo 1 → UsuarioPerfil  (nombre, apellidos, teléfono, dirección)
+    //   Nodo 4 → UsuarioAcceso  (email, multas_acumuladas)
+    const [perfilRes, accesoRes] = await Promise.allSettled([
+      queryPerfil(
+        `UPDATE UsuarioPerfil
+         SET nombre = ?, apellidos = ?, telefono = ?, direccion = ?
+         WHERE id_usuario = ?`,
+        [nombre, apellidos, telefono ?? null, direccion ?? null, id]
+      ),
+      queryAcceso(
+        `UPDATE UsuarioAcceso
+         SET email = ?, multas_acumuladas = ?
+         WHERE id_usuario = ?`,
+        [email ?? null, Number(multas_acumuladas) || 0, id]
+      ),
+    ])
+
+    res.json({
+      ok: true,
+      perfil_actualizado: perfilRes.status === 'fulfilled',   // Nodo 1
+      acceso_actualizado: accesoRes.status === 'fulfilled',   // Nodo 4
+      perfil_error: perfilRes.status === 'rejected' ? perfilRes.reason?.message : null,
+      acceso_error: accesoRes.status === 'rejected'  ? accesoRes.reason?.message  : null,
+    })
+  } catch (err) {
+    res.status(500).json({ message: 'Error al actualizar usuario', detail: err.message })
   }
 })
 

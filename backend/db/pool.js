@@ -147,4 +147,29 @@ export async function buscarUsuario(idUsuario) {
   }
 }
 
+/**
+ * Fan-out de ESCRITURA: ejecuta la misma sentencia (UPDATE/INSERT/DELETE)
+ * en los 6 nodos en paralelo. Usar para tablas REPLICADAS (Sucursal, Categoria, Libro).
+ * No aborta si un nodo está caído — devuelve el estado por nodo (Promise.allSettled).
+ * @param {string} sql    - sentencia SQL con ?
+ * @param {Array}  params - parámetros
+ * @returns {Array<{idNodo, nombre, ok, affectedRows?, error?}>}
+ */
+export async function escribirEnTodos(sql, params = []) {
+  const resultados = await Promise.allSettled(
+    Object.keys(nodos).map(async (idStr) => {
+      const idNodo = Number(idStr)
+      const r = await queryNodo(idNodo, sql, params)
+      return { idNodo, affectedRows: r.affectedRows }
+    })
+  )
+  return Object.keys(nodos).map((idStr, i) => {
+    const idNodo = Number(idStr)
+    const res = resultados[i]
+    return res.status === 'fulfilled'
+      ? { idNodo, nombre: nodos[idNodo].nombre, ok: true,  affectedRows: res.value.affectedRows }
+      : { idNodo, nombre: nodos[idNodo].nombre, ok: false, error: res.reason?.message }
+  })
+}
+
 export { nodoDeSucursal, MI_NODO, nodos, NODO_PERFIL, NODO_ACCESO }
