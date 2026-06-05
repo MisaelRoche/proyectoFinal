@@ -90,47 +90,39 @@ router.get('/:id/disponibilidad', async (req, res) => {
 })
 
 // GET /api/libros/:id/admin
-// LibroAdmin (costo, proveedor, fecha_adquisicion) SOLO existe en Nodo 4
+// Libro está replicado con costo, proveedor, fecha_adquisicion en todos los nodos
 router.get('/:id/admin', async (req, res) => {
   try {
     const idLibro = Number(req.params.id)
-    // queryNodo(4, ...) consulta directamente al Nodo 4 (Mexicali Universidad)
-    const [admin] = await queryNodo(
-      4,
-      `SELECT l.id_libro, l.titulo, l.autor, la.costo, la.proveedor, la.fecha_adquisicion
-       FROM Libro l JOIN LibroAdmin la ON l.id_libro = la.id_libro
+    const [admin] = await queryLocal(
+      `SELECT l.id_libro, l.titulo, l.autor, l.costo, l.proveedor, l.fecha_adquisicion
+       FROM Libro l
        WHERE l.id_libro = ?`,
       [idLibro]
     )
-    if (!admin) return res.status(404).json({ message: 'Datos administrativos no encontrados en Nodo 4' })
+    if (!admin) return res.status(404).json({ message: 'Datos administrativos no encontrados' })
     res.json(admin)
   } catch (err) {
-    // Si el Nodo 4 no está disponible, devolver error descriptivo
-    const msg = err.message.includes('ECONNREFUSED') || err.message.includes('connect')
-      ? 'Nodo 4 (Mexicali Universidad) no disponible'
-      : 'Error al obtener datos administrativos'
-    res.status(503).json({ message: msg, detail: err.message })
+    res.status(500).json({ message: 'Error al obtener datos administrativos', detail: err.message })
   }
 })
 
-// GET /api/libros/admin/costos — reporte total de costos (solo Nodo 4)
+// GET /api/libros/admin/costos — reporte total de costos (Libro replicado)
 router.get('/admin/costos', async (req, res) => {
   try {
-    const rows = await queryNodo(
-      4,
+    const rows = await queryLocal(
       `SELECT c.nombre AS categoria, COUNT(*) AS total_libros,
-              SUM(la.costo) AS costo_total, AVG(la.costo) AS costo_promedio,
-              la.proveedor
-       FROM LibroAdmin la
-       JOIN Libro l ON la.id_libro = l.id_libro
+               SUM(l.costo) AS costo_total, AVG(l.costo) AS costo_promedio,
+               l.proveedor
+       FROM Libro l
        JOIN Categoria c ON l.id_categoria = c.id_categoria
-       GROUP BY c.nombre, la.proveedor
+       GROUP BY c.nombre, l.proveedor
        ORDER BY costo_total DESC`,
       []
     )
     res.json(rows)
   } catch (err) {
-    res.status(503).json({ message: 'Nodo 4 (Mexicali Universidad) no disponible', detail: err.message })
+    res.status(500).json({ message: 'Error al obtener reporte de costos', detail: err.message })
   }
 })
 
