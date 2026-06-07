@@ -347,9 +347,9 @@ function TabFederado() {
 
   return (
     <div>
-      <p className="text-muted" style={{ marginBottom: '1rem', fontSize: '0.85rem' }}>
+      {/* <p className="text-muted" style={{ marginBottom: '1rem', fontSize: '0.85rem' }}>
         JOIN federado: <strong>UsuarioPerfil (Nodo 1)</strong> + <strong>Prestamo (Nodo 2)</strong> — {datos.length} préstamos en Tijuana
-      </p>
+      </p> */}
       <div className="table-wrapper">
         <table>
           <thead>

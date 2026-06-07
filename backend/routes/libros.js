@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { queryLocal, queryTodos, queryNodo, nodoDeSucursal } from '../db/pool.js'
+import { queryLocal, queryTodos, queryNodo, nodoDeSucursal, escribirEnTodos, MI_NODO } from '../db/pool.js'
 
 const router = Router()
 
@@ -161,6 +161,103 @@ router.put('/:idLibro/inventario/:idSucursal', async (req, res) => {
       ? `Nodo de sucursal ${req.params.idSucursal} no disponible`
       : 'Error al actualizar inventario'
     res.status(503).json({ message: msg, detail: err.message })
+  }
+})
+
+// POST /api/libros — alta de libro (replicado → los 6 nodos) + inventario (solo Nodo 5)
+router.post('/', async (req, res) => {
+  try {
+    const { titulo, autor, editorial, anio, id_categoria, paginas, idioma, isbn, costo, proveedor, fecha_adquisicion, copias_totales, copias_disponibles, ubicacion_fisica } = req.body
+
+    if (!titulo || !id_categoria) {
+      return res.status(400).json({ message: 'Faltan campos obligatorios: titulo, id_categoria' })
+    }
+
+    if (copias_disponibles !== undefined && copias_totales !== undefined && Number(copias_disponibles) > Number(copias_totales)) {
+      return res.status(400).json({ message: 'copias_disponibles no puede ser mayor que copias_totales' })
+    }
+
+    const [maxRow] = await queryLocal('SELECT MAX(id_libro) AS max FROM Libro')
+    const nuevoId = (maxRow?.max || 0) + 1
+
+    const resultado = await escribirEnTodos(
+      `INSERT INTO Libro (id_libro, isbn, titulo, autor, editorial, anio, id_categoria, paginas, idioma, costo, proveedor, fecha_adquisicion)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [nuevoId, isbn ?? null, titulo, autor ?? null, editorial ?? null, anio ? Number(anio) : null, Number(id_categoria), paginas ? Number(paginas) : null, idioma ?? null, costo ? Number(costo) : null, proveedor ?? null, fecha_adquisicion ?? null]
+    )
+
+    const nodosOk = resultado.filter(r => r.ok).length
+    const nodosTotal = resultado.length
+
+    if (copias_totales !== undefined) {
+      await queryLocal(
+        `INSERT INTO Inventario (id_libro, id_sucursal, copias_totales, copias_disponibles, ubicacion_fisica)
+         VALUES (?, ?, ?, ?, ?)`,
+        [nuevoId, MI_NODO, Number(copias_totales) || 0, Number(copias_disponibles) ?? Number(copias_totales) ?? 0, ubicacion_fisica ?? null]
+      )
+    }
+
+    res.status(201).json({ ok: true, id_libro: nuevoId, nodos_ok: nodosOk, nodos_total: nodosTotal, detalle: resultado })
+  } catch (err) {
+    console.error('[libros POST]', err)
+    res.status(500).json({ message: 'Error al crear libro', detail: err.message })
+  }
+})
+
+// DELETE /api/libros/:id — baja de libro (solo si no hay préstamos ni inventario activo en ningún nodo)
+router.delete('/:id', async (req, res) => {
+  try {
+    const id = Number(req.params.id)
+
+    const [libro] = await queryLocal('SELECT * FROM Libro WHERE id_libro = ?', [id])
+    if (!libro) return res.status(404).json({ message: 'Libro no encontrado' })
+
+    const prestamosTodos = await queryTodos(
+      'SELECT id_prestamo, estatus, id_sucursal FROM Prestamo WHERE id_libro = ?',
+      [id]
+    )
+    if (prestamosTodos.length > 0) {
+      const porNodo = {}
+      for (const p of prestamosTodos) {
+        const n = p._nodo
+        if (!porNodo[n]) porNodo[n] = { nodo: n, prestamos: 0, activos: 0, vencidos: 0 }
+        porNodo[n].prestamos++
+        if (p.estatus === 'activo') porNodo[n].activos++
+        if (p.estatus === 'vencido') porNodo[n].vencidos++
+      }
+      return res.status(409).json({
+        message: 'No se puede eliminar: el libro tiene préstamos asociados',
+        bloqueado_por: 'prestamos',
+        detalle: Object.values(porNodo),
+      })
+    }
+
+    const inventarioActivo = await queryTodos(
+      'SELECT id_inventario, id_sucursal, copias_totales, copias_disponibles FROM Inventario WHERE id_libro = ? AND copias_totales > 0',
+      [id]
+    )
+    if (inventarioActivo.length > 0) {
+      const porNodo = inventarioActivo.map(i => ({ nodo: i._nodo, id_sucursal: i.id_sucursal, copias_totales: i.copias_totales, copias_disponibles: i.copias_disponibles }))
+      return res.status(409).json({
+        message: 'No se puede eliminar: el libro aún tiene copias en inventario',
+        bloqueado_por: 'inventario',
+        detalle: porNodo,
+      })
+    }
+
+    const invRes = await escribirEnTodos('DELETE FROM Inventario WHERE id_libro = ?', [id])
+    const libRes = await escribirEnTodos('DELETE FROM Libro WHERE id_libro = ?', [id])
+
+    res.json({
+      ok: true,
+      id_libro: id,
+      titulo: libro.titulo,
+      inventario_eliminado: invRes.filter(r => r.ok).length + '/' + invRes.length,
+      libro_eliminado: libRes.filter(r => r.ok).length + '/' + libRes.length,
+    })
+  } catch (err) {
+    console.error('[libros DELETE]', err)
+    res.status(500).json({ message: 'Error al eliminar libro', detail: err.message })
   }
 })
 
