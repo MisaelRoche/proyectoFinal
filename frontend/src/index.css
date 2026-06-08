@@ -123,6 +123,7 @@ button:disabled {
 .badge-red    { background: #fadbd8; color: #922b21; }
 .badge-orange { background: #fdebd0; color: #935116; }
 .badge-gray   { background: #eaecee; color: #5d6d7e; }
+.badge-blue   { background: #d6eaf8; color: #1a5276; }
 
 /* Forms */
 .form-row {

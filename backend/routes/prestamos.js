@@ -21,6 +21,25 @@ function diasRetraso(esperada) {
 }
 
 /**
+ * Ejecuta queryLocal con timeout para tablas federadas.
+ * Si el nodo remoto no responde en msTimeout, devuelve [].
+ */
+async function queryFed(sql, params = [], msTimeout = 15000) {
+  const timeout = new Promise((_, reject) =>
+    setTimeout(() => reject(new Error('TIMEOUT')), msTimeout)
+  )
+  try {
+    return await Promise.race([queryLocal(sql, params), timeout])
+  } catch (err) {
+    if (err.message === 'TIMEOUT') {
+      console.warn('[prestamos federado] Timeout en tabla federada')
+      return []
+    }
+    throw err
+  }
+}
+
+/**
  * Enriquecer una fila de Prestamo con nombre de usuario, título de libro y nombre de sucursal.
  * El usuario puede estar en un nodo remoto → buscarUsuario() lo localiza.
  */
@@ -88,6 +107,108 @@ router.get('/:id', async (req, res) => {
     res.json(await enrich(p))
   } catch (err) {
     res.status(500).json({ message: 'Error al obtener préstamo', detail: err.message })
+  }
+})
+
+// Consulta federada: prestamo_nodo2 y prestamo_nodo3 contra Libro local (Nodo 4)
+router.get('/activos/tijuana-ensenada', async (req, res) => {
+  try {
+    const idSucursal = Number(req.query.id_sucursal) || 0
+    let filas = []
+
+    const sqlBase = (tabla, suc) => `
+      SELECT l.titulo AS libro, p.id_prestamo, p.id_usuario,
+             p.fecha_prestamo, p.fecha_devolucion_esperada, p.id_sucursal
+      FROM ${tabla} p
+      JOIN Libro l ON p.id_libro = l.id_libro
+      WHERE p.estatus = 'activo'
+      ORDER BY p.fecha_prestamo`
+
+    if (idSucursal === 2) {
+      filas = await queryFed(sqlBase('prestamo_nodo2', 2))
+    } else if (idSucursal === 3) {
+      filas = await queryFed(sqlBase('prestamo_nodo3', 3))
+    } else {
+      const [res2, res3] = await Promise.allSettled([
+        queryFed(sqlBase('prestamo_nodo2', 2)),
+        queryFed(sqlBase('prestamo_nodo3', 3)),
+      ])
+      if (res2.status === 'fulfilled') filas = filas.concat(res2.value)
+      if (res3.status === 'fulfilled') filas = filas.concat(res3.value)
+      filas.sort((a, b) => a.id_sucursal - b.id_sucursal || new Date(a.fecha_prestamo) - new Date(b.fecha_prestamo))
+    }
+
+    res.json(filas)
+  } catch (err) {
+    res.status(500).json({ message: 'Error al consultar préstamos federados', detail: err.message })
+  }
+})
+
+// POST /api/prestamos/federado
+// Crea préstamo en Nodo 2 o Nodo 3 vía tablas federadas (prestamo_nodo2 / prestamo_nodo3)
+router.post('/federado', async (req, res) => {
+  try {
+    const { id_usuario, id_libro, id_sucursal } = req.body
+
+    if (!id_usuario || !id_libro || !id_sucursal) {
+      return res.status(400).json({ message: 'Faltan campos: id_usuario, id_libro, id_sucursal' })
+    }
+    if (![2, 3].includes(Number(id_sucursal))) {
+      return res.status(400).json({ message: 'Sucursal debe ser 2 (Tijuana) o 3 (Ensenada)' })
+    }
+
+    const fechaPrestamo   = today()
+    const fechaDevolucion  = addDays(fechaPrestamo, 30)
+    const tabla = Number(id_sucursal) === 2 ? 'prestamo_nodo2' : 'prestamo_nodo3'
+
+    const [maxRow] = await queryLocal(`SELECT COALESCE(MAX(id_prestamo), 0) + 1 AS nextId FROM ${tabla}`)
+    const nextId = maxRow.nextId
+
+    await queryLocal(
+      `INSERT INTO ${tabla} (id_prestamo, id_usuario, id_libro, id_sucursal, fecha_prestamo,
+         fecha_devolucion_esperada, estatus, multa)
+       VALUES (?, ?, ?, ?, ?, ?, 'activo', 0.00)`,
+      [nextId, id_usuario, id_libro, Number(id_sucursal), fechaPrestamo, fechaDevolucion]
+    )
+
+    const [nuevo] = await queryLocal(
+      `SELECT * FROM ${tabla} WHERE id_prestamo = ?`,
+      [nextId]
+    )
+
+    res.status(201).json(nuevo)
+  } catch (err) {
+    console.error('[prestamos POST federado]', err)
+    res.status(500).json({ message: 'Error al crear préstamo federado', detail: err.message })
+  }
+})
+
+// DELETE /api/prestamos/federado/:idSucursal/:idPrestamo
+// Elimina préstamo de Nodo 2 o Nodo 3 vía tabla federada
+router.delete('/federado/:idSucursal/:idPrestamo', async (req, res) => {
+  try {
+    const idSucursal  = Number(req.params.idSucursal)
+    const idPrestamo  = Number(req.params.idPrestamo)
+
+    if (![2, 3].includes(idSucursal)) {
+      return res.status(400).json({ message: 'Sucursal debe ser 2 (Tijuana) o 3 (Ensenada)' })
+    }
+
+    const tabla = idSucursal === 2 ? 'prestamo_nodo2' : 'prestamo_nodo3'
+
+    const result = await queryLocal(
+      `DELETE FROM ${tabla} WHERE id_prestamo = ?`,
+      [idPrestamo]
+    )
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: `Préstamo ${idPrestamo} no encontrado en sucursal ${idSucursal}` })
+    }
+
+    res.json({ ok: true, id_prestamo: idPrestamo, id_sucursal: idSucursal })
+  } catch (err) {
+    console.error('[prestamos DELETE federado]', err)
+    res.status(500).json({ message: 'Error al eliminar préstamo federado', detail: err.message })
   }
 })
 

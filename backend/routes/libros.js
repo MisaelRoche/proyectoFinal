@@ -90,39 +90,20 @@ router.get('/:id/disponibilidad', async (req, res) => {
 })
 
 // GET /api/libros/:id/admin
-// Libro está replicado con costo, proveedor, fecha_adquisicion en todos los nodos
+// Datos básicos del libro (Nodo 4 sin columnas admin)
 router.get('/:id/admin', async (req, res) => {
   try {
     const idLibro = Number(req.params.id)
     const [admin] = await queryLocal(
-      `SELECT l.id_libro, l.titulo, l.autor, l.costo, l.proveedor, l.fecha_adquisicion
+      `SELECT l.id_libro, l.titulo, l.autor, l.editorial, l.anio, l.paginas, l.idioma
        FROM Libro l
        WHERE l.id_libro = ?`,
       [idLibro]
     )
-    if (!admin) return res.status(404).json({ message: 'Datos administrativos no encontrados' })
+    if (!admin) return res.status(404).json({ message: 'Libro no encontrado' })
     res.json(admin)
   } catch (err) {
-    res.status(500).json({ message: 'Error al obtener datos administrativos', detail: err.message })
-  }
-})
-
-// GET /api/libros/admin/costos — reporte total de costos (Libro replicado)
-router.get('/admin/costos', async (req, res) => {
-  try {
-    const rows = await queryLocal(
-      `SELECT c.nombre AS categoria, COUNT(*) AS total_libros,
-               SUM(l.costo) AS costo_total, AVG(l.costo) AS costo_promedio,
-               l.proveedor
-       FROM Libro l
-       JOIN Categoria c ON l.id_categoria = c.id_categoria
-       GROUP BY c.nombre, l.proveedor
-       ORDER BY costo_total DESC`,
-      []
-    )
-    res.json(rows)
-  } catch (err) {
-    res.status(500).json({ message: 'Error al obtener reporte de costos', detail: err.message })
+    res.status(500).json({ message: 'Error al obtener datos del libro', detail: err.message })
   }
 })
 
