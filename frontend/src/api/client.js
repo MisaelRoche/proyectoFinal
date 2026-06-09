@@ -2,7 +2,10 @@ const BASE = '/api'
 
 export async function get(path) {
   const res = await fetch(`${BASE}${path}`)
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.message || err.detail || `HTTP ${res.status}`)
+  }
   return res.json()
 }
 
@@ -28,6 +31,17 @@ export async function put(path, body) {
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
     throw new Error(err.message || `HTTP ${res.status}`)
+  }
+  return res.json()
+}
+
+export async function del(path) {
+  const res = await fetch(`${BASE}${path}`, {
+    method: 'DELETE',
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.message || err.detail || `HTTP ${res.status}`)
   }
   return res.json()
 }

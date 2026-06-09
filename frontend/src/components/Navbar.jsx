@@ -6,11 +6,12 @@ export default function Navbar() {
     <nav className="navbar">
       <span className="navbar-brand">Biblioteca Distribuida BC</span>
       <div className="navbar-links">
-        <NavLink to="/"          className={({ isActive }) => isActive ? 'active' : ''}>Dashboard</NavLink>
-        <NavLink to="/catalogo"  className={({ isActive }) => isActive ? 'active' : ''}>Catálogo</NavLink>
+        <NavLink to="/" className={({ isActive }) => isActive ? 'active' : ''}>Dashboard</NavLink>
+        <NavLink to="/catalogo" className={({ isActive }) => isActive ? 'active' : ''}>Catálogo</NavLink>
         <NavLink to="/prestamos" className={({ isActive }) => isActive ? 'active' : ''}>Préstamos</NavLink>
-        <NavLink to="/usuarios"    className={({ isActive }) => isActive ? 'active' : ''}>Usuarios</NavLink>
-        <NavLink to="/sucursales"  className={({ isActive }) => isActive ? 'active' : ''}>Sucursales</NavLink>
+        <NavLink to="/usuarios" className={({ isActive }) => isActive ? 'active' : ''}>Usuarios</NavLink>
+        <NavLink to="/sucursales" className={({ isActive }) => isActive ? 'active' : ''}>Sucursales</NavLink>
+        <NavLink to="/consulta-zahid" className={({ isActive }) => isActive ? 'active' : ''}>Consulta Zahid</NavLink>
       </div>
     </nav>
   )
