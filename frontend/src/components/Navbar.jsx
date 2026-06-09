@@ -11,6 +11,8 @@ export default function Navbar() {
         <NavLink to="/prestamos" className={({ isActive }) => isActive ? 'active' : ''}>Préstamos</NavLink>
         <NavLink to="/usuarios"    className={({ isActive }) => isActive ? 'active' : ''}>Usuarios</NavLink>
         <NavLink to="/sucursales"  className={({ isActive }) => isActive ? 'active' : ''}>Sucursales</NavLink>
+        {/* <NavLink to="/consultas"      className={({ isActive }) => isActive ? 'active' : ''}>Consultas</NavLink> */}
+        <NavLink to="/prestamos-nodos" className={({ isActive }) => isActive ? 'active' : ''}>Consulta Misael</NavLink>
       </div>
     </nav>
   )

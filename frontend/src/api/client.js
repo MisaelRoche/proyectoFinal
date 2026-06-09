@@ -31,3 +31,15 @@ export async function put(path, body) {
   }
   return res.json()
 }
+
+export async function del(path) {
+  const res = await fetch(`${BASE}${path}`, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.message || `HTTP ${res.status}`)
+  }
+  return res.json()
+}

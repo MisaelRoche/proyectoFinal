@@ -91,7 +91,7 @@ router.get('/:id', async (req, res) => {
   }
 })
 
-// POST /api/prestamos — crear nuevo préstamo (escribe en local)
+// POST /api/prestamos — crear nuevo préstamo (rutea al nodo dueño de la sucursal)
 router.post('/', async (req, res) => {
   try {
     const { id_usuario, id_libro, id_sucursal } = req.body
@@ -100,11 +100,10 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ message: 'Faltan campos: id_usuario, id_libro, id_sucursal' })
     }
 
-    // Validar que la sucursal corresponde a este nodo
-    if (Number(id_sucursal) !== MI_NODO) {
-      return res.status(400).json({
-        message: `Este nodo (${MI_NODO}) solo registra préstamos de la sucursal ${MI_NODO}`,
-      })
+    // Determinar el nodo destino según la sucursal — id_sucursal === id_nodo
+    const idNodoDestino = nodoDeSucursal(Number(id_sucursal))
+    if (idNodoDestino < 1 || idNodoDestino > 6) {
+      return res.status(400).json({ message: `Sucursal inválida: ${id_sucursal}. Usa valores del 1 al 6.` })
     }
 
     // Validar usuario (puede estar en otro nodo — préstamo inter-sucursal)
@@ -113,36 +112,44 @@ router.post('/', async (req, res) => {
       return res.status(404).json({ message: `Usuario ${id_usuario} no encontrado en ningún nodo` })
     }
 
-    // Validar libro (replicado → local)
+    // Validar libro (replicado en los 6 nodos → lectura local válida)
     const [libro] = await queryLocal('SELECT id_libro FROM Libro WHERE id_libro = ?', [id_libro])
     if (!libro) return res.status(404).json({ message: 'Libro no encontrado' })
 
-    // Validar inventario local
-    const [inv] = await queryLocal(
+    // Validar inventario en el nodo destino (Inventario está fragmentado por sucursal)
+    const [inv] = await queryNodo(
+      idNodoDestino,
       'SELECT * FROM Inventario WHERE id_libro = ? AND id_sucursal = ?',
       [id_libro, id_sucursal]
     )
     if (!inv || inv.copias_disponibles <= 0) {
-      return res.status(409).json({ message: 'No hay copias disponibles en esta sucursal' })
+      return res.status(409).json({ message: `No hay copias disponibles en la sucursal ${id_sucursal}` })
     }
 
-    // Descontar del inventario local
-    await queryLocal(
+    // Descontar del inventario en el nodo destino
+    await queryNodo(
+      idNodoDestino,
       'UPDATE Inventario SET copias_disponibles = copias_disponibles - 1 WHERE id_libro = ? AND id_sucursal = ?',
       [id_libro, id_sucursal]
     )
 
-    // Insertar préstamo en local
+    // Insertar préstamo en el nodo destino
     const fechaPrestamo   = today()
     const fechaDevolucion = addDays(fechaPrestamo, 30)
 
-    const result = await queryLocal(
+    const result = await queryNodo(
+      idNodoDestino,
       `INSERT INTO Prestamo (id_usuario, id_libro, id_sucursal, fecha_prestamo, fecha_devolucion_esperada, estatus, multa)
        VALUES (?, ?, ?, ?, ?, 'activo', 0.00)`,
       [id_usuario, id_libro, id_sucursal, fechaPrestamo, fechaDevolucion]
     )
 
-    const [nuevo] = await queryLocal('SELECT * FROM Prestamo WHERE id_prestamo = ?', [result.insertId])
+    // Releer la fila desde el nodo destino (ahí vive el registro)
+    const [nuevo] = await queryNodo(
+      idNodoDestino,
+      'SELECT * FROM Prestamo WHERE id_prestamo = ?',
+      [result.insertId]
+    )
     res.status(201).json(await enrich(nuevo))
   } catch (err) {
     console.error('[prestamos POST]', err)
