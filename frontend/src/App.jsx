@@ -5,6 +5,7 @@ import Catalogo from './pages/Catalogo'
 import Prestamos from './pages/Prestamos'
 import Usuarios from './pages/Usuarios'
 import Sucursales from './pages/Sucursales'
+import ConsultaYair from './pages/ConsultaYair'
 
 export default function App() {
   return (
@@ -17,6 +18,7 @@ export default function App() {
           <Route path="/prestamos" element={<Prestamos />} />
           <Route path="/usuarios" element={<Usuarios />} />
           <Route path="/sucursales" element={<Sucursales />} />
+          <Route path="/consulta-yair" element={<ConsultaYair />} />
         </Routes>
       </main>
     </BrowserRouter>
